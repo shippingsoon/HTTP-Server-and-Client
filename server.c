@@ -20,7 +20,6 @@ int main(void)
 	long file_size;
 	struct server_info serv;
 	struct client_info client;
-	int sd;
 	
 	//Set default values for our server's settings.
 	config_init(&serv);
@@ -30,9 +29,10 @@ int main(void)
 		parse_config(&serv, file_data, file_size, "\n");
 	//Free the data.
 	FREE(file_data);
-	
+	//Initiate the server and block until a connection has been established.
 	server(&serv, &client);
-	response(&serv, &client);
+	//Process HTTP request.
+	request(&serv, &client);
 	return EXIT_SUCCESS;
 }
 
@@ -40,8 +40,8 @@ int main(void)
 long load_file(const char *file_path, char **buffer)
 {
 	FILE *file;
-	long file_size;
 	size_t result;
+	long file_size;
 	
 	file_size = 0;
 	//Open the file for reading.
@@ -67,6 +67,7 @@ void config_init(struct server_info *serv)
 {
 	//Set defaults values.
 	strncpy(serv->path, DEFAULT_DIRECTORY, PATH_MAX);
+	strncpy(serv->index, DEFAULT_DIRECTORY_INDEX, NAME_MAX);
 	strncpy(serv->port, DEFAULT_PORT, 6);
 	strncpy(serv->name, DEFAULT_SERVERNAME, 255);
 	strncpy(serv->version, DEFAULT_VERSION, 10);
@@ -82,20 +83,23 @@ void parse_config(struct server_info *serv, char *file_data, size_t max, const c
 	for (token = strtok(data, delimiters); token != NULL; token = strtok(NULL, delimiters)) {
 		//Get the server name.
 		if (strstr(token, "ServerName") != NULL)
-			sscanf(token, "%*s %s", serv->name);
+			sscanf(token, "%*s %255s", serv->name);
 		//Get the port number.
 		else if (strstr(token, "Port") != NULL)
-			sscanf(token, "%*s %s", serv->port);
+			sscanf(token, "%*s %6s", serv->port);
 		//Get the public HTML directory.
 		else if (strstr(token, "Directory") != NULL)
-			sscanf(token, "%*s %s", serv->path);
+			sscanf(token, "%*s %"CAT(PATH_MAX)"s", serv->path);
 		//Get the server's version.
 		else if (strstr(token, "Version") != NULL)
-			sscanf(token, "%*s %s", serv->version);
+			sscanf(token, "%*s %10s", serv->version);
+		//Get the default directory file.
+		else if (strstr(token, "Index") != NULL)
+			sscanf(token, "%*s %"CAT(NAME_MAX)"s", serv->index);
 	}
 }
 
-//Initiates the server.
+//Initiates the server and blocks until a connection has been established.
 int server(struct server_info *serv, struct client_info *client)
 {
 	struct addrinfo hints, *res, *ai;
@@ -118,82 +122,133 @@ int server(struct server_info *serv, struct client_info *client)
 	//Loop through our linked list of addrinfo structs.
 	for (ai = res; ai != NULL; ai = ai->ai_next) {
 		//Retrieve the socket descriptor.
-		if ((serv->sd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) == -1)
+		if ((serv->net.sd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol)) == -1)
 			continue;
 		break;
 	}
 	//Allow our socket to forcibly bind to a port.
-	if (setsockopt(serv->sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
-		die("setsockopt() error", serv->sd, res);
+	if (setsockopt(serv->net.sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1)
+		die("setsockopt() error", serv->net.sd, res);
 	//Bind the socket to a port.
-	if ((bind(serv->sd, res->ai_addr, res->ai_addrlen)) == -1)
-		die("bind() error", serv->sd, res);
+	if ((bind(serv->net.sd, res->ai_addr, res->ai_addrlen)) == -1)
+		die("bind() error", serv->net.sd, res);
 	//This dynamically allocated addrinfo is no longer needed.
 	freeaddrinfo(res);
 	//Make our socket descriptor listen on a port.
-	if ((listen(serv->sd, BACKLOG)) == -1)
-		die("listen() error", serv->sd, NULL);
+	if ((listen(serv->net.sd, BACKLOG)) == -1)
+		die("listen() error", serv->net.sd, NULL);
 	//Accept an incoming connection.
-	if ((client->sd = accept(serv->sd, (struct sockaddr *) &dest, &sock_size)) == -1)
-		die("accept() error", serv->sd, NULL);
+	if ((client->net.sd = accept(serv->net.sd, (struct sockaddr *) &dest, &sock_size)) == -1)
+		die("accept() error", serv->net.sd, NULL);
 	else
-		strncpy(client->ip, inet_ntoa(dest.sin_addr), INET_ADDRSTRLEN);
-	printf("Server has received a connection from (%s)\n", client->ip);
+		strncpy(client->net.ip, inet_ntoa(dest.sin_addr), INET_ADDRSTRLEN);
+	printf("Server has received a connection from (%s)\n", client->net.ip);
 	//This socket descriptor is no longer needed.
-	close(serv->sd);
-	return client->sd;
+	close(serv->net.sd);
+	return client->net.sd;
 }
 
-
-
-//Builds the HTTP response.
-void response(struct server_info *serv, struct client_info *client)
+//Receives an HTTP request.
+void request(struct server_info *serv, struct client_info *client)
 {
-	char buffer[KBYTE], date_time[30], *file_data;
-	int bytes, idx;
-	long file_size;
-
-	idx = 0;
-	get_local_time(date_time, 30);
-	idx = build_response(buffer, idx, "HTTP/1.1 %i %s", OK, "OK");
-	idx = build_response(buffer, idx, "Date: %s", date_time);
-	idx = build_response(buffer, idx, "Server: %s %s", serv->name, serv->version);
-	idx = build_response(buffer, idx, "Last-Modified: %s", date_time);
-	idx = build_response(buffer, idx, "ETag: %s", "\"56d-9989200-1132c580\"");
-	idx = build_response(buffer, idx, "Content-Type: %s", "text/html");
-	idx = build_response(buffer, idx, "Content-Length: %i", 110);
-	idx = build_response(buffer, idx, "Accept-Ranges: %s", "bytes");
-	idx = build_response(buffer, idx, "Connection: %s", "close");
+	int bytes;
 	
-	if ((bytes = recv(client->sd, client->request, KBYTE - 1, 0)) == -1)
-		die("recv() error", client->sd, NULL);
+	if ((bytes = recv(client->net.sd, client->net.buffer, KBYTE - 1, 0)) == -1)
+		die("recv() error", client->net.sd, NULL);
 	else
-		client->request[bytes] = '\0';
-	printf("Received (%i) bytes:\n%s", bytes, client->request);
-
-	const char *resp = 
-		"HTTP/1.1 200 OK\r\n"
-		"Date: Thu, 19 Feb 2009 12:27:04 GMT\r\n"
-		"Server: Apache/2.2.3\r\n"
-		"Last-Modified: Wed, 18 Jun 2003 16:05:58 GMT\r\n"
-		"ETag: \"56d-9989200-1132c580\"\r\n"
-		"Content-Type: text/html\r\n"
-		"Content-Length: 110\r\n"
-		"Accept-Ranges: bytes\r\n"
-		"Connection: close\r\n"
-		"\r\n"
-		"<html>"
-		"<head>"
-		"<title>An Example Page</title>"
-		"</head>"
-		"<body>"
-		"Hello World, this is a very simple HTML document."
-		"</body>"
-		"</html>";
-	if (send(client->sd, resp, strlen(resp), 0) == -1)
-		die("send() error", client->sd, NULL);
+		client->net.buffer[bytes] = '\0';
+	printf("Received (%i) bytes:\n%s", bytes, client->net.buffer);
+	//Process the HTTP request and builds a response.
+	handle_request(serv, client);
+	//
+	if (send(client->net.sd, serv->net.buffer, strlen(serv->net.buffer), 0) == -1)
+		die("send() error", client->net.sd, NULL);
 	//Close the socket descriptor.
-	close(client->sd);
+	close(client->net.sd);
+}
+
+//Processes the HTTP request and builds a response.
+void handle_request(struct server_info *serv, struct client_info *client)
+{
+	char date_time[30], url[PATH_MAX], response[KBYTE], *file_data, *token;
+	int idx, len, i;
+	long file_size;
+	struct http_info http;
+	
+	idx = 0;
+	http.code = OK;
+	//Add the server's public HTML directory to the URL.
+	snprintf(url, PATH_MAX, "%s", serv->path);
+	//Parse the HTTP request line by line.
+	for (token = strtok(client->net.buffer, "\n"); token != NULL; token = strtok(NULL, "\n")) {
+		//Get the user's request.
+		if (strstr(token, "GET") != NULL)
+			sscanf(token, "%*s %"CAT(NAME_MAX)"s %*s", client->request);
+		//Get the user agent.
+		else if (strstr(token, "User-Agent") != NULL)
+			sscanf(token, "%*s %300[^\n]s", client->agent);
+	}
+	//Append the client's request to the URL.
+	strncat(url, client->request, PATH_MAX);
+	//If the requested URL ends with a forward slash '/' then append the default directory index.
+	if ((len = strlen(client->request)) == 1 || client->request[len - 1] == '/')
+		strncat(url, serv->index, PATH_MAX);
+	//Inspect the requested page for bad characters.
+	for (i = 0; i < len; i++) {
+		if (client->request[i] == '.' || client->request[i] == '$') {
+			http.code = BAD_REQUEST;
+			break;
+		}
+	}
+	//Attempt to load the web page into memory.
+	if (http.code == OK) {
+		if ((file_size = load_file(url, &file_data)) == 0)
+			http.code = NOT_FOUND;
+	}
+	//Set the HTTP status message.
+	http_status(http.message, http.code);
+	//Get the local time and date.
+	get_local_time(date_time, 30);
+	//Build the HTTP response line by line.
+	idx = build_response(serv->net.buffer, idx, "HTTP/1.1 %i %s", http.code, http.message);
+	idx = build_response(serv->net.buffer, idx, "Date: %s", date_time);
+	idx = build_response(serv->net.buffer, idx, "Server: %s %s", serv->name, serv->version);
+	idx = build_response(serv->net.buffer, idx, "Last-Modified: %s", date_time);
+	idx = build_response(serv->net.buffer, idx, "ETag: %s", "\"56d-9989200-1132c580\"");
+	idx = build_response(serv->net.buffer, idx, "Content-Type: %s", "text/html");
+	idx = build_response(serv->net.buffer, idx, "Content-Length: %i", file_size);
+	idx = build_response(serv->net.buffer, idx, "Accept-Ranges: %s", "bytes");
+	idx = build_response(serv->net.buffer, idx, "Connection: %s", "close");
+	strncat(serv->net.buffer, "\r\n", KBYTE);
+	//Concat the web file.
+	if (http.code == OK)
+		strncat(serv->net.buffer, file_data, KBYTE);
+	//Free up memory.
+	FREE(file_data);
+}
+
+//Sets the HTTP response message.
+void http_status(char *message, int code)
+{
+	switch (code) {
+		case BAD_REQUEST:
+			strncpy(message, "BAD REQUEST", 100);
+			break;
+		case FORBIDDEN:
+			strncpy(message, "FORBIDDEN", 100);
+			break;
+		case NOT_FOUND:
+			strncpy(message, "NOT FOUND", 100);
+			break;
+		case INTERNAL_ERROR:
+			strncpy(message, "INTERNAL_ERROR", 100);
+			break;
+		case NOT_IMPLEMENTED:
+			strncpy(message, "NOT IMPLEMENTED", 100);
+			break;
+		default:
+			strncpy(message, "OK", 100);
+	}
 }
 
 //Adds a new entry in the HTTP response.

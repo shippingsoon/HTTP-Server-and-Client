@@ -10,7 +10,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #define HOST "127.0.0.1"
-#define PORT "4671"
+#define PORT "6301"
 #define MAXDATASIZE 1000
 
 void die(const char * s, int sock, struct addrinfo * res)
