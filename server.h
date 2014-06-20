@@ -21,6 +21,7 @@
 #define DEFAULT_PORT "6301"
 #define DEFAULT_SERVERNAME "cServer"
 #define DEFAULT_DIRECTORY "www"
+#define DEFAULT_LOG_DIRECTORY "var/log"
 #define DEFAULT_DIRECTORY_INDEX "index.html"
 #define DEFAULT_VERSION "v0.04"
 #define FREE(p)	\
@@ -56,7 +57,7 @@ struct socket {
 
 //Holds the server's configuration data.
 struct server_info {
-	char path[PATH_MAX], port[6], name[255], version[10], index[NAME_MAX];
+	char path[PATH_MAX], log[PATH_MAX], port[6], name[255], version[10], index[NAME_MAX];
 	struct socket net;
 };
 
@@ -88,3 +89,6 @@ void config_init(struct server_info *serv);
 
 //Parse the configuration file's entries line by line.
 void parse_config(struct server_info *serv, char *file_data, size_t max, const char *delimiters);
+
+//Logs server and client information.
+void log_message(const char *file_path, char *buffer);

@@ -1,0 +1,5 @@
+127.0.0.1 - [Fri, 19 Jun 2014 00:29:14 GMT] - GET / - Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.153 Safari/537.36
+127.0.0.1 - [Fri, 19 Jun 2014 00:29:41 GMT] - GET / - Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.153 Safari/537.36
+127.0.0.1 - [Fri, 20 Jun 2014 00:32:46 GMT] - GET / - Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.153 Safari/537.36
+127.0.0.1 - [Fri, 20 Jun 2014 00:32:54 GMT] - GET /index.html - Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.153 Safari/537.36
+127.0.0.1 - [Fri, 20 Jun 2014 00:35:10 GMT] - GET /foobar - Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.153 Safari/537.36

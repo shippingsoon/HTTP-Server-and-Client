@@ -77,11 +77,30 @@ long load_file(const char *file_path, char **buffer)
 	return file_size;
 }
 
+//Logs server and client information.
+void log_message(const char *file_path, char *buffer)
+{
+	FILE *file;
+	size_t result;
+	int len;
+	
+	//Open the file for writing.
+	if ((file = fopen(file_path, "ab")) != NULL) {
+		len = strlen(buffer);
+		//Log the message.
+		if ((result = fwrite(buffer, sizeof(char), len, file)) != len)
+			fputs("fwrite() error", stderr);
+		//Close the file.
+		fclose(file);
+	}
+}
+
 //Set default values for the configuration struct.
 void config_init(struct server_info *serv)
 {
 	//Set defaults values.
 	strncpy(serv->path, DEFAULT_DIRECTORY, PATH_MAX);
+	strncpy(serv->log, DEFAULT_LOG_DIRECTORY, PATH_MAX);
 	strncpy(serv->index, DEFAULT_DIRECTORY_INDEX, NAME_MAX);
 	strncpy(serv->port, DEFAULT_PORT, 6);
 	strncpy(serv->name, DEFAULT_SERVERNAME, 255);
@@ -111,6 +130,9 @@ void parse_config(struct server_info *serv, char *file_data, size_t max, const c
 		//Get the default directory file.
 		else if (strstr(token, "Index") != NULL)
 			sscanf(token, "%*s %"CAT(NAME_MAX)"s", serv->index);
+		//Get the log directory.
+		else if (strstr(token, "Log") != NULL)
+			sscanf(token, "%*s %"CAT(PATH_MAX)"s", serv->log);
 	}
 }
 
@@ -185,7 +207,7 @@ void request(struct server_info *serv, struct client_info *client)
 //Processes the HTTP request and builds a response.
 void handle_request(struct server_info *serv, struct client_info *client)
 {
-	char date_time[30], url[PATH_MAX], response[KBYTE], *file_data, *token;
+	char date_time[30], access_log[KBYTE], url[PATH_MAX], response[KBYTE], *file_data, *token;
 	int idx, len, i;
 	long file_size;
 	struct http_info http;
@@ -226,6 +248,9 @@ void handle_request(struct server_info *serv, struct client_info *client)
 	http_status(http.message, http.code);
 	//Get the local time and date.
 	get_local_time(date_time, 30);
+	//Log the request.
+	snprintf(access_log, KBYTE, "%s - [%s] - GET %s - %s\n", client->net.ip, date_time, client->request, client->agent); 
+	log_message(serv->log, access_log);
 	//Build the HTTP response line by line.
 	idx = build_response(serv->net.buffer, idx, "HTTP/1.1 %i %s", http.code, http.message);
 	idx = build_response(serv->net.buffer, idx, "Date: %s", date_time);
@@ -238,10 +263,11 @@ void handle_request(struct server_info *serv, struct client_info *client)
 	idx = build_response(serv->net.buffer, idx, "Connection: %s", "close");
 	strncat(serv->net.buffer, "\r\n", KBYTE);
 	//Concat the web file.
-	if (http.code == OK)
+	if (http.code == OK) {
 		strncat(serv->net.buffer, file_data, KBYTE);
-	//Free up memory.
-	FREE(file_data);
+		//Free up memory.
+		FREE(file_data);
+	}
 }
 
 //Sets the HTTP response message.
