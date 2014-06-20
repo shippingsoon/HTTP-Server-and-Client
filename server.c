@@ -14,6 +14,21 @@
 #include <limits.h>
 #include "server.h"
 
+//Adds a new entry in the HTTP response.
+int build_response(char *buffer, int idx, const char *format, ...)
+{
+	va_list args;
+	
+	if (idx == 0)
+		memset(buffer, '\0', KBYTE);
+	va_start(args, format);
+	idx += vsnprintf(buffer + idx, KBYTE - idx, format, args);
+	idx += snprintf(buffer + idx, KBYTE - idx, "\r\n");
+	va_end(args);
+	return idx;
+}
+
+//Main function.
 int main(void)
 {
 	char *file_data;
@@ -249,20 +264,6 @@ void http_status(char *message, int code)
 		default:
 			strncpy(message, "OK", 100);
 	}
-}
-
-//Adds a new entry in the HTTP response.
-int build_response(char *buffer, int idx, const char *format, ...)
-{
-	va_list args;
-	
-	if (idx == 0)
-		memset(buffer, '\0', KBYTE);
-	va_start(args, format);
-	idx += vsnprintf(buffer + idx, KBYTE - idx, format, args);
-	idx += snprintf(buffer + idx, KBYTE - idx, "\r\n");
-	va_end(args);
-	return idx;
 }
 
 //Retrieve and format the local time.
