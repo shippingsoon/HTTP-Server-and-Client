@@ -210,11 +210,13 @@ void handle_request(struct server_info *serv, struct client_info *client)
 		strncat(url, serv->index, PATH_MAX);
 	//Inspect the requested page for bad characters.
 	for (i = 0; i < len; i++) {
-		if (client->request[i] == '.' || client->request[i] == '$') {
+		if (client->request[i] == '$' || client->request[i] == '~') {
 			http.code = BAD_REQUEST;
 			break;
 		}
 	}
+	if (strstr(client->request, "..") != NULL)
+		http.code = BAD_REQUEST;
 	//Attempt to load the web page into memory.
 	if (http.code == OK) {
 		if ((file_size = load_file(url, &file_data)) == 0)
