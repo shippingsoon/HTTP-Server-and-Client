@@ -1,5 +1,5 @@
 /*
-	Copyright © 2014 Shipping Soon. All Rights Reserved.
+	Copyright 2014 Shipping Soon. All Rights Reserved.
 */
 
 #include <stdio.h>
@@ -9,9 +9,8 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
-#define HOST "127.0.0.1"
-#define PORT "6301"
-#define MAXDATASIZE 1000
+#include "client.h"
+
 
 void die(const char * s, int sock, struct addrinfo * res)
 {
@@ -26,40 +25,33 @@ void die(const char * s, int sock, struct addrinfo * res)
 int main(void)
 {
 	struct addrinfo hints, * res;
+	struct sockaddr_in * tmp;
 	int sd, bytes, error;
-	char buf[MAXDATASIZE];
-	char * say = "123456789\n123456789\n123456789\n123456789\n---------\n";
+	char buf[KBYTE];
+	char msg[KBYTE];
+	
+	strncpy(msg, "GET / HTTP/1.1\r\nHost: localhost:6301", KBYTE);
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
-	
 	if ((error = getaddrinfo(HOST, PORT, &hints, &res)) != 0) {
-		fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(error));
+		fprintf(stderr, "getaddrinfo() error: %s\n", gai_strerror(error));
 		return 2;
 	}
-	
 	if((sd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1)
-		die("An error has occurred", 0, res);
-	
+		die("socket() error", 0, res);
 	if (connect(sd, res->ai_addr, res->ai_addrlen) == -1)
-		die("An error has occurred", sd, res);
-		
-	struct sockaddr_in * tmp = (struct sockaddr_in *) res->ai_addr;
+		die("connect() error", sd, res);
+	tmp = (struct sockaddr_in *) res->ai_addr;
 	printf("Client has received connection from (%s)\n", inet_ntoa(tmp->sin_addr));
-	
 	freeaddrinfo(res);
-	
-	printf("Sending (%i) bytes\n", strlen(say));
-	if (send(sd, say, strlen(say), 0) == -1)
-		die("An error has occurred", sd, NULL);
-		
-	if ((bytes = recv(sd, buf, MAXDATASIZE-1, 0)) == -1)
-		die("An error occurred", sd, NULL);
+	if (send(sd, msg, strlen(msg), 0) == -1)
+		die("send() error", sd, NULL);
+	if ((bytes = recv(sd, buf, KBYTE-1, 0)) == -1)
+		die("recv() error", sd, NULL);
 	else
 		buf[bytes] = '\0';
 	printf("Received (%i) bytes:\n%s", bytes, buf);
-	
 	close(sd);
-	printf("\n-----------------------------\n");
 	return 0;
 }
