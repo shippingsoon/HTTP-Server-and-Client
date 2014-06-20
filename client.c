@@ -30,7 +30,7 @@ int main(void)
 	char buf[KBYTE];
 	char msg[KBYTE];
 	
-	strncpy(msg, "GET / HTTP/1.1\r\nHost: localhost:6301", KBYTE);
+	strncpy(msg, "GET / HTTP/1.1\r\nHost: localhost:6301\r\nUser-Agent: cClient\r\n", KBYTE);
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
